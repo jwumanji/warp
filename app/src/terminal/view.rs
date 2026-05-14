@@ -4731,10 +4731,6 @@ impl TerminalView {
         true
     }
 
-    fn can_pop_nested_cloud_agent_view(&self, ctx: &AppContext) -> bool {
-        self.is_ambient_agent_session(ctx) && self.is_nested_cloud_mode(ctx)
-    }
-
     /// Exits the active agent, either:
     /// * Exiting agent view for the selected conversation
     /// * Popping the current view off the navigation stack (for cloud mode agents)
