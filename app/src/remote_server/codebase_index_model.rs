@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use ai::index::full_source_code_embedding::{EmbeddingConfig, NodeHash};
-use remote_server::codebase_index_proto::{RemoteCodebaseIndexState, RemoteCodebaseIndexStatus};
+use remote_server::codebase_index_proto::{
+    RemoteCodebaseEmbeddingConfig, RemoteCodebaseIndexState, RemoteCodebaseIndexStatus,
+};
 use warp_core::HostId;
 use warp_util::remote_path::RemotePath;
 use warp_util::standardized_path::StandardizedPath;
@@ -75,6 +77,21 @@ fn remote_codebase_name(repo_path: &str) -> String {
         .find(|segment| !segment.is_empty())
         .unwrap_or(repo_path)
         .to_string()
+}
+
+fn embedding_config_from_remote(
+    embedding_config: RemoteCodebaseEmbeddingConfig,
+) -> EmbeddingConfig {
+    match embedding_config {
+        RemoteCodebaseEmbeddingConfig::OpenAiTextSmall3_256 => {
+            EmbeddingConfig::OpenAiTextSmall3_256
+        }
+        RemoteCodebaseEmbeddingConfig::VoyageCode3_512 => EmbeddingConfig::VoyageCode3_512,
+        RemoteCodebaseEmbeddingConfig::Voyage3_5_Lite_512 => {
+            EmbeddingConfig::Voyage3_5_Lite_512
+        }
+        RemoteCodebaseEmbeddingConfig::Voyage3_5_512 => EmbeddingConfig::Voyage3_5_512,
+    }
 }
 
 #[derive(Default)]
@@ -523,10 +540,19 @@ fn search_availability_for_status(
                     message: "The remote codebase index is missing its root hash.".to_string(),
                 };
             };
+            let Some(embedding_config) =
+                status.embedding_config.map(embedding_config_from_remote)
+            else {
+                return RemoteCodebaseSearchAvailability::Unavailable {
+                    remote_path,
+                    message: "The remote codebase index is missing its embedding configuration."
+                        .to_string(),
+                };
+            };
             RemoteCodebaseSearchAvailability::Ready(RemoteCodebaseSearchContext {
                 remote_path,
                 root_hash,
-                embedding_config: EmbeddingConfig::default(),
+                embedding_config,
             })
         }
         RemoteCodebaseIndexState::Queued | RemoteCodebaseIndexState::Indexing => {

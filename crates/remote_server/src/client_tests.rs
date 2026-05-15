@@ -50,6 +50,7 @@ fn not_enabled_codebase_status(repo_path: &str) -> CodebaseIndexStatus {
         progress_total: None,
         failure_message: None,
         root_hash: None,
+        embedding_config: None,
     }
 }
 

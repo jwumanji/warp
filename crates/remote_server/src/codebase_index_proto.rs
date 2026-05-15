@@ -11,6 +11,7 @@ pub struct RemoteCodebaseIndexStatus {
     pub progress_total: Option<u64>,
     pub failure_message: Option<String>,
     pub root_hash: Option<String>,
+    pub embedding_config: Option<RemoteCodebaseEmbeddingConfig>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -23,6 +24,13 @@ pub enum RemoteCodebaseIndexState {
     Ready,
     Stale,
     Failed,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RemoteCodebaseEmbeddingConfig {
+    OpenAiTextSmall3_256,
+    VoyageCode3_512,
+    Voyage3_5_Lite_512,
+    Voyage3_5_512,
 }
 
 // ── Rust → Proto ────────────────────────────────────────────
@@ -37,6 +45,7 @@ impl From<&RemoteCodebaseIndexStatus> for proto::CodebaseIndexStatus {
             progress_total: status.progress_total,
             failure_message: status.failure_message.clone(),
             root_hash: status.root_hash.clone(),
+            embedding_config: status.embedding_config.map(proto_embedding_config).map(Into::into),
         }
     }
 }
@@ -65,6 +74,22 @@ fn proto_state(state: RemoteCodebaseIndexState) -> proto::CodebaseIndexStatusSta
     }
 }
 
+fn proto_embedding_config(
+    embedding_config: RemoteCodebaseEmbeddingConfig,
+) -> proto::CodebaseEmbeddingConfig {
+    match embedding_config {
+        RemoteCodebaseEmbeddingConfig::OpenAiTextSmall3_256 => {
+            proto::CodebaseEmbeddingConfig::OpenAiTextSmall3256
+        }
+        RemoteCodebaseEmbeddingConfig::VoyageCode3_512 => {
+            proto::CodebaseEmbeddingConfig::VoyageCode3512
+        }
+        RemoteCodebaseEmbeddingConfig::Voyage3_5_Lite_512 => {
+            proto::CodebaseEmbeddingConfig::Voyage35Lite512
+        }
+        RemoteCodebaseEmbeddingConfig::Voyage3_5_512 => proto::CodebaseEmbeddingConfig::Voyage35512,
+    }
+}
 // ── Proto → Rust ──────────────────────────────────────────────────
 
 pub fn proto_to_codebase_index_status(
@@ -78,6 +103,12 @@ pub fn proto_to_codebase_index_status(
         progress_total: status.progress_total,
         failure_message: status.failure_message.clone(),
         root_hash: status.root_hash.clone(),
+        embedding_config: status
+            .embedding_config
+            .and_then(|embedding_config| {
+                proto::CodebaseEmbeddingConfig::try_from(embedding_config).ok()
+            })
+            .and_then(proto_to_embedding_config),
     })
 }
 
@@ -111,6 +142,25 @@ fn proto_to_state(state: proto::CodebaseIndexStatusState) -> Option<RemoteCodeba
     }
 }
 
+fn proto_to_embedding_config(
+    embedding_config: proto::CodebaseEmbeddingConfig,
+) -> Option<RemoteCodebaseEmbeddingConfig> {
+    match embedding_config {
+        proto::CodebaseEmbeddingConfig::OpenAiTextSmall3256 => {
+            Some(RemoteCodebaseEmbeddingConfig::OpenAiTextSmall3_256)
+        }
+        proto::CodebaseEmbeddingConfig::VoyageCode3512 => {
+            Some(RemoteCodebaseEmbeddingConfig::VoyageCode3_512)
+        }
+        proto::CodebaseEmbeddingConfig::Voyage35Lite512 => {
+            Some(RemoteCodebaseEmbeddingConfig::Voyage3_5_Lite_512)
+        }
+        proto::CodebaseEmbeddingConfig::Voyage35512 => {
+            Some(RemoteCodebaseEmbeddingConfig::Voyage3_5_512)
+        }
+        proto::CodebaseEmbeddingConfig::Unspecified => None,
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,6 +173,7 @@ mod tests {
             progress_total: None,
             failure_message: None,
             root_hash: None,
+            embedding_config: None,
         }
     }
 
@@ -149,11 +200,16 @@ mod tests {
     fn ready_status_round_trips_retrieval_metadata() {
         let status = RemoteCodebaseIndexStatus {
             root_hash: Some("root-hash".to_string()),
+            embedding_config: Some(RemoteCodebaseEmbeddingConfig::VoyageCode3_512),
             ..status(RemoteCodebaseIndexState::Ready)
         };
 
         let proto = proto::CodebaseIndexStatus::from(&status);
         assert_eq!(proto.root_hash.as_deref(), Some("root-hash"));
+        assert_eq!(
+            proto.embedding_config,
+            Some(proto::CodebaseEmbeddingConfig::VoyageCode3512.into())
+        );
         assert_eq!(proto_to_codebase_index_status(&proto), Some(status));
     }
 
@@ -193,8 +249,27 @@ mod tests {
             progress_total: None,
             failure_message: None,
             root_hash: None,
+            embedding_config: None,
         };
 
         assert_eq!(proto_to_codebase_index_status(&status), None);
+    }
+
+    #[test]
+    fn all_embedding_configs_round_trip_through_proto() {
+        for embedding_config in [
+            RemoteCodebaseEmbeddingConfig::OpenAiTextSmall3_256,
+            RemoteCodebaseEmbeddingConfig::VoyageCode3_512,
+            RemoteCodebaseEmbeddingConfig::Voyage3_5_Lite_512,
+            RemoteCodebaseEmbeddingConfig::Voyage3_5_512,
+        ] {
+            let status = RemoteCodebaseIndexStatus {
+                embedding_config: Some(embedding_config),
+                ..status(RemoteCodebaseIndexState::Ready)
+            };
+
+            let proto = proto::CodebaseIndexStatus::from(&status);
+            assert_eq!(proto_to_codebase_index_status(&proto), Some(status));
+        }
     }
 }

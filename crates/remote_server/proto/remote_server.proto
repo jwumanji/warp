@@ -404,6 +404,13 @@ enum CodebaseIndexStatusState {
   CODEBASE_INDEX_STATUS_STATE_STALE = 7;
   CODEBASE_INDEX_STATUS_STATE_FAILED = 8;
 }
+enum CodebaseEmbeddingConfig {
+  CODEBASE_EMBEDDING_CONFIG_UNSPECIFIED = 0;
+  CODEBASE_EMBEDDING_CONFIG_OPEN_AI_TEXT_SMALL_3_256 = 1;
+  CODEBASE_EMBEDDING_CONFIG_VOYAGE_CODE_3_512 = 2;
+  CODEBASE_EMBEDDING_CONFIG_VOYAGE_3_5_LITE_512 = 3;
+  CODEBASE_EMBEDDING_CONFIG_VOYAGE_3_5_512 = 4;
+}
 
 message CodebaseIndexStatus {
   string repo_path = 1;
@@ -413,6 +420,7 @@ message CodebaseIndexStatus {
   optional uint64 progress_total = 5;
   optional string failure_message = 6;
   optional string root_hash = 7;
+  optional CodebaseEmbeddingConfig embedding_config = 8;
 }
 
 message CodebaseIndexStatusesSnapshot {

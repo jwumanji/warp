@@ -26,6 +26,7 @@ fn ready_status(repo_path: &str) -> RemoteCodebaseIndexStatus {
         root_hash: Some(
             "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
         ),
+        embedding_config: Some(RemoteCodebaseEmbeddingConfig::VoyageCode3_512),
     }
 }
 
@@ -163,6 +164,35 @@ fn host_disconnect_marks_settings_entries_unavailable_without_removing_them() {
         model.availability_for_remote(&host, Some("/repo"), None),
         RemoteCodebaseSearchAvailability::Unavailable { .. }
     ));
+}
+
+#[test]
+fn missing_embedding_config_is_unavailable() {
+    let mut status = ready_status("/repo");
+    status.embedding_config = None;
+
+    let availability = search_availability_for_status(&status, remote_path("/repo"));
+
+    assert!(matches!(
+        availability,
+        RemoteCodebaseSearchAvailability::Unavailable { .. }
+    ));
+}
+
+#[test]
+fn ready_status_uses_propagated_embedding_config() {
+    let mut status = ready_status("/repo");
+    status.embedding_config = Some(RemoteCodebaseEmbeddingConfig::OpenAiTextSmall3_256);
+
+    let availability = search_availability_for_status(&status, remote_path("/repo"));
+
+    let RemoteCodebaseSearchAvailability::Ready(context) = availability else {
+        panic!("Expected ready remote codebase search context");
+    };
+    assert_eq!(
+        context.embedding_config,
+        EmbeddingConfig::OpenAiTextSmall3_256
+    );
 }
 
 #[test]
