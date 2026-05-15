@@ -589,8 +589,6 @@ pub struct RemoteServerManager {
     sessions: HashMap<SessionId, RemoteSessionState>,
     /// Reverse index: host → sessions for O(1) lookup by `HostId`.
     host_to_sessions: HashMap<HostId, HashSet<SessionId>>,
-    /// User-facing connection labels by host, used by host-scoped UI.
-    host_labels: HashMap<HostId, String>,
     /// User-facing connection labels by session, applied after the initialize
     /// handshake returns a host ID.
     session_labels: HashMap<SessionId, String>,
@@ -624,7 +622,6 @@ impl RemoteServerManager {
         Self {
             sessions: HashMap::new(),
             host_to_sessions: HashMap::new(),
-            host_labels: HashMap::new(),
             session_labels: HashMap::new(),
             spawner: ctx.spawner(),
             last_navigated_path: HashMap::new(),
@@ -663,10 +660,13 @@ impl RemoteServerManager {
             .find_map(|sid| self.client_for_session(sid).map(|client| (sid, client)))
     }
 
-    /// Returns the user-facing connection label for a connected or previously
-    /// connected host, if one has been recorded.
+    /// Returns the user-facing connection label for a connected host, if one
+    /// has been recorded on any active session for that host.
     pub fn host_label(&self, host_id: &HostId) -> Option<&str> {
-        self.host_labels.get(host_id).map(String::as_str)
+        self.host_to_sessions
+            .get(host_id)?
+            .iter()
+            .find_map(|session_id| self.session_labels.get(session_id).map(String::as_str))
     }
 
     /// Checks if the remote server binary is installed and executable.
@@ -1956,10 +1956,6 @@ impl RemoteServerManager {
             .entry(host_id.clone())
             .or_default()
             .insert(session_id);
-        if let Some(connection_label) = self.session_labels.get(&session_id) {
-            self.host_labels
-                .insert(host_id.clone(), connection_label.clone());
-        }
         ctx.spawn_stream_local(
             event_rx,
             move |me, event, ctx| {
