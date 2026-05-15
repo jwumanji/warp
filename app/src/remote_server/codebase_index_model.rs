@@ -1,10 +1,8 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use ai::index::full_source_code_embedding::{EmbeddingConfig, NodeHash};
-use remote_server::codebase_index_proto::{
-    RemoteCodebaseEmbeddingConfig, RemoteCodebaseIndexState, RemoteCodebaseIndexStatus,
-};
+use ai::index::full_source_code_embedding::NodeHash;
+use remote_server::codebase_index_proto::{RemoteCodebaseIndexState, RemoteCodebaseIndexStatus};
 use warp_core::HostId;
 use warp_util::remote_path::RemotePath;
 use warp_util::standardized_path::StandardizedPath;
@@ -23,7 +21,6 @@ use super::manager::{
 pub struct RemoteCodebaseSearchContext {
     pub remote_path: RemotePath,
     pub root_hash: NodeHash,
-    pub embedding_config: EmbeddingConfig,
 }
 
 #[derive(Clone, Debug)]
@@ -77,19 +74,6 @@ fn remote_codebase_name(repo_path: &str) -> String {
         .find(|segment| !segment.is_empty())
         .unwrap_or(repo_path)
         .to_string()
-}
-
-fn embedding_config_from_remote(
-    embedding_config: RemoteCodebaseEmbeddingConfig,
-) -> EmbeddingConfig {
-    match embedding_config {
-        RemoteCodebaseEmbeddingConfig::OpenAiTextSmall3_256 => {
-            EmbeddingConfig::OpenAiTextSmall3_256
-        }
-        RemoteCodebaseEmbeddingConfig::VoyageCode3_512 => EmbeddingConfig::VoyageCode3_512,
-        RemoteCodebaseEmbeddingConfig::Voyage3_5_Lite_512 => EmbeddingConfig::Voyage3_5_Lite_512,
-        RemoteCodebaseEmbeddingConfig::Voyage3_5_512 => EmbeddingConfig::Voyage3_5_512,
-    }
 }
 
 #[derive(Default)]
@@ -330,7 +314,7 @@ impl RemoteCodebaseIndexModel {
         );
         for status_with_path in statuses {
             log::debug!(
-                "[Remote codebase indexing] Client received bootstrap codebase index status: repo_path={} state={:?} has_root_hash={} embedding_config={:?}",
+                "[Remote codebase indexing] Client received bootstrap codebase index status: repo_path={} state={:?} has_root_hash={}",
                 status_with_path.status.repo_path,
                 status_with_path.status.state,
                 status_with_path
@@ -338,7 +322,6 @@ impl RemoteCodebaseIndexModel {
                     .root_hash
                     .as_deref()
                     .is_some_and(|root_hash| !root_hash.is_empty()),
-                status_with_path.status.embedding_config,
             );
         }
         let incoming_statuses = statuses
@@ -380,20 +363,18 @@ impl RemoteCodebaseIndexModel {
             return false;
         }
         log::info!(
-            "[Remote codebase indexing] Client applying codebase index status update: host_id={} state={:?} has_root_hash={} embedding_config={:?}",
+            "[Remote codebase indexing] Client applying codebase index status update: host_id={} state={:?} has_root_hash={}",
             remote_path.host_id,
             status.state,
             status
                 .root_hash
                 .as_deref()
                 .is_some_and(|root_hash| !root_hash.is_empty()),
-            status.embedding_config,
         );
         log::debug!(
-            "[Remote codebase indexing] Client applying codebase index status update: repo_path={} state={:?} embedding_config={:?}",
+            "[Remote codebase indexing] Client applying codebase index status update: repo_path={} state={:?}",
             status.repo_path,
             status.state,
-            status.embedding_config,
         );
         self.statuses.insert(remote_path, status);
         true
@@ -546,18 +527,9 @@ fn search_availability_for_status(
                     message: "The remote codebase index is missing its root hash.".to_string(),
                 };
             };
-            let Some(embedding_config) = status.embedding_config.map(embedding_config_from_remote)
-            else {
-                return RemoteCodebaseSearchAvailability::Unavailable {
-                    remote_path,
-                    message: "The remote codebase index is missing its embedding configuration."
-                        .to_string(),
-                };
-            };
             RemoteCodebaseSearchAvailability::Ready(RemoteCodebaseSearchContext {
                 remote_path,
                 root_hash,
-                embedding_config,
             })
         }
         RemoteCodebaseIndexState::Queued | RemoteCodebaseIndexState::Indexing => {

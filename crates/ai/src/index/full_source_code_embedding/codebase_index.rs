@@ -1385,7 +1385,6 @@ impl CodebaseIndex {
                 }),
                 sync_progress: None,
                 root_hash: root_hash.clone(),
-                embedding_config: self.embedding_config,
             },
             TreeSourceSyncState::InitializeTreeFailure(e) => CodebaseIndexStatus {
                 has_pending: false,
@@ -1393,7 +1392,6 @@ impl CodebaseIndex {
                 last_sync_successful: Some(CodebaseIndexFinishedStatus::Failed(e.into())),
                 sync_progress: None,
                 root_hash: root_hash.clone(),
-                embedding_config: self.embedding_config,
             },
             TreeSourceSyncState::Syncing { sync_progress, .. } => CodebaseIndexStatus {
                 has_pending: true,
@@ -1401,7 +1399,6 @@ impl CodebaseIndex {
                 last_sync_successful: None,
                 sync_progress: *sync_progress,
                 root_hash: root_hash.clone(),
-                embedding_config: self.embedding_config,
             },
         }
     }

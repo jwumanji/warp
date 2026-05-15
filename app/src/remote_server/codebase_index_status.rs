@@ -4,9 +4,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use ::ai::index::full_source_code_embedding::manager::{
     CodebaseIndexFinishedStatus, CodebaseIndexStatus as LocalCodebaseIndexStatus,
 };
-use ::ai::index::full_source_code_embedding::{EmbeddingConfig, SyncProgress};
+use ::ai::index::full_source_code_embedding::SyncProgress;
 
-use super::proto::{CodebaseEmbeddingConfig, CodebaseIndexStatus, CodebaseIndexStatusState};
+use super::proto::{CodebaseIndexStatus, CodebaseIndexStatusState};
 
 fn current_epoch_millis() -> u64 {
     SystemTime::now()
@@ -36,15 +36,6 @@ pub(super) fn unavailable_codebase_index_status(
     }
 }
 
-fn proto_embedding_config(embedding_config: EmbeddingConfig) -> CodebaseEmbeddingConfig {
-    match embedding_config {
-        EmbeddingConfig::OpenAiTextSmall3_256 => CodebaseEmbeddingConfig::OpenAiTextSmall3256,
-        EmbeddingConfig::VoyageCode3_512 => CodebaseEmbeddingConfig::VoyageCode3512,
-        EmbeddingConfig::Voyage3_5_Lite_512 => CodebaseEmbeddingConfig::Voyage35Lite512,
-        EmbeddingConfig::Voyage3_5_512 => CodebaseEmbeddingConfig::Voyage35512,
-    }
-}
-
 fn base_codebase_index_status(
     repo_path: String,
     state: CodebaseIndexStatusState,
@@ -57,7 +48,6 @@ fn base_codebase_index_status(
         progress_total: None,
         failure_message: None,
         root_hash: None,
-        embedding_config: None,
     }
 }
 
@@ -76,7 +66,6 @@ pub(super) fn codebase_index_status_to_proto(
         progress_total,
         failure_message: failure_message_from_codebase_index_status(status),
         root_hash: status.root_hash().map(|hash| hash.to_string()),
-        embedding_config: Some(proto_embedding_config(status.embedding_config()).into()),
     }
 }
 

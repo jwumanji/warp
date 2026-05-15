@@ -146,7 +146,6 @@ pub struct CodebaseIndexStatus {
     pub(super) last_sync_successful: Option<CodebaseIndexFinishedStatus>,
     pub(super) sync_progress: Option<SyncProgress>,
     pub(super) root_hash: Option<NodeHash>,
-    pub(super) embedding_config: EmbeddingConfig,
 }
 
 impl CodebaseIndexStatus {
@@ -174,10 +173,6 @@ impl CodebaseIndexStatus {
 
     pub fn root_hash(&self) -> Option<&NodeHash> {
         self.root_hash.as_ref()
-    }
-
-    pub fn embedding_config(&self) -> EmbeddingConfig {
-        self.embedding_config
     }
 }
 
