@@ -1,6 +1,7 @@
 //! Conversion between remote codebase indexing domain types and proto-generated types.
 
 use crate::proto;
+use serde::Serialize;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemoteCodebaseIndexStatus {
@@ -14,7 +15,8 @@ pub struct RemoteCodebaseIndexStatus {
     pub embedding_config: Option<RemoteCodebaseEmbeddingConfig>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum RemoteCodebaseIndexState {
     NotEnabled,
     Unavailable,
@@ -26,7 +28,8 @@ pub enum RemoteCodebaseIndexState {
     Failed,
 }
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum RemoteCodebaseEmbeddingConfig {
     OpenAiTextSmall3_256,
     VoyageCode3_512,
