@@ -87,9 +87,7 @@ fn embedding_config_from_remote(
             EmbeddingConfig::OpenAiTextSmall3_256
         }
         RemoteCodebaseEmbeddingConfig::VoyageCode3_512 => EmbeddingConfig::VoyageCode3_512,
-        RemoteCodebaseEmbeddingConfig::Voyage3_5_Lite_512 => {
-            EmbeddingConfig::Voyage3_5_Lite_512
-        }
+        RemoteCodebaseEmbeddingConfig::Voyage3_5_Lite_512 => EmbeddingConfig::Voyage3_5_Lite_512,
         RemoteCodebaseEmbeddingConfig::Voyage3_5_512 => EmbeddingConfig::Voyage3_5_512,
     }
 }
@@ -193,6 +191,12 @@ impl RemoteCodebaseIndexModel {
 
     pub fn request_index(&self, remote_path: RemotePath, ctx: &mut ModelContext<Self>) {
         RemoteServerManager::handle(ctx).update(ctx, |manager, ctx| {
+            manager.ensure_codebase_indexed(remote_path, ctx);
+        });
+    }
+
+    pub fn resync_index(&self, remote_path: RemotePath, ctx: &mut ModelContext<Self>) {
+        RemoteServerManager::handle(ctx).update(ctx, |manager, ctx| {
             manager.resync_codebase(remote_path, ctx);
         });
     }
@@ -253,9 +257,8 @@ impl RemoteCodebaseIndexModel {
                     && should_auto_index_remote_codebase(ctx)
                     && self.should_request_auto_index_for_navigated_git_repo(remote_path)
                 {
-                    // Mirrors local auto-indexing for the thin remote E2E path. TODO(APP-3792):
-                    // route remote indexing through the speedbump/consent flow instead of
-                    // requesting immediately on navigation.
+                    // Mirrors local auto-indexing: remote navigation silently requests indexing
+                    // only when the shared auto-index setting allows it.
                     let remote_path = remote_path.clone();
                     RemoteServerManager::handle(ctx).update(ctx, |manager, ctx| {
                         manager.ensure_codebase_indexed(remote_path, ctx);
@@ -327,7 +330,7 @@ impl RemoteCodebaseIndexModel {
         );
         for status_with_path in statuses {
             log::debug!(
-                "[Remote codebase indexing] Client received bootstrap codebase index status: repo_path={} state={:?} has_root_hash={}",
+                "[Remote codebase indexing] Client received bootstrap codebase index status: repo_path={} state={:?} has_root_hash={} embedding_config={:?}",
                 status_with_path.status.repo_path,
                 status_with_path.status.state,
                 status_with_path
@@ -335,6 +338,7 @@ impl RemoteCodebaseIndexModel {
                     .root_hash
                     .as_deref()
                     .is_some_and(|root_hash| !root_hash.is_empty()),
+                status_with_path.status.embedding_config,
             );
         }
         let incoming_statuses = statuses
@@ -376,18 +380,20 @@ impl RemoteCodebaseIndexModel {
             return false;
         }
         log::info!(
-            "[Remote codebase indexing] Client applying codebase index status update: host_id={} state={:?} has_root_hash={}",
+            "[Remote codebase indexing] Client applying codebase index status update: host_id={} state={:?} has_root_hash={} embedding_config={:?}",
             remote_path.host_id,
             status.state,
             status
                 .root_hash
                 .as_deref()
                 .is_some_and(|root_hash| !root_hash.is_empty()),
+            status.embedding_config,
         );
         log::debug!(
-            "[Remote codebase indexing] Client applying codebase index status update: repo_path={} state={:?}",
+            "[Remote codebase indexing] Client applying codebase index status update: repo_path={} state={:?} embedding_config={:?}",
             status.repo_path,
             status.state,
+            status.embedding_config,
         );
         self.statuses.insert(remote_path, status);
         true
@@ -540,8 +546,7 @@ fn search_availability_for_status(
                     message: "The remote codebase index is missing its root hash.".to_string(),
                 };
             };
-            let Some(embedding_config) =
-                status.embedding_config.map(embedding_config_from_remote)
+            let Some(embedding_config) = status.embedding_config.map(embedding_config_from_remote)
             else {
                 return RemoteCodebaseSearchAvailability::Unavailable {
                     remote_path,
@@ -572,13 +577,13 @@ fn search_availability_for_status(
 }
 
 fn should_auto_index_remote_codebase(ctx: &mut ModelContext<RemoteCodebaseIndexModel>) -> bool {
-    remote_auto_indexing_enabled(
+    remote_codebase_auto_indexing_enabled(
         UserWorkspaces::as_ref(ctx).is_codebase_context_enabled(ctx),
         *CodeSettings::as_ref(ctx).auto_indexing_enabled,
     )
 }
 
-fn remote_auto_indexing_enabled(
+fn remote_codebase_auto_indexing_enabled(
     codebase_context_enabled: bool,
     auto_indexing_enabled: bool,
 ) -> bool {

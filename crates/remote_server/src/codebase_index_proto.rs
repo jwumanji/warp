@@ -25,6 +25,7 @@ pub enum RemoteCodebaseIndexState {
     Stale,
     Failed,
 }
+#[allow(non_camel_case_types)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RemoteCodebaseEmbeddingConfig {
     OpenAiTextSmall3_256,
@@ -45,7 +46,10 @@ impl From<&RemoteCodebaseIndexStatus> for proto::CodebaseIndexStatus {
             progress_total: status.progress_total,
             failure_message: status.failure_message.clone(),
             root_hash: status.root_hash.clone(),
-            embedding_config: status.embedding_config.map(proto_embedding_config).map(Into::into),
+            embedding_config: status
+                .embedding_config
+                .map(proto_embedding_config)
+                .map(Into::into),
         }
     }
 }

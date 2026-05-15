@@ -373,9 +373,11 @@ impl RemoteServerClient {
                         .ok_or(ClientError::UnexpectedResponse)?;
                 log::info!(
                     "[Remote codebase indexing] Client received {operation} response: \
-                     repo_path={} state={:?}",
+                     repo_path={} state={:?} root_hash_present={} embedding_config={:?}",
                     status.repo_path,
-                    status.state
+                    status.state,
+                    status.root_hash.is_some(),
+                    status.embedding_config,
                 );
                 Ok(status)
             }
@@ -801,11 +803,13 @@ impl RemoteServerClient {
                     log::info!(
                         "[Remote codebase indexing] Client received codebase index status in snapshot: \
                          repo_path={} state={:?} root_hash_present={} \
+                         embedding_config={:?} \
                          progress_completed={:?} progress_total={:?} \
                          failure_message={:?}",
                         status.repo_path,
                         status.state,
                         status.root_hash.is_some(),
+                        status.embedding_config,
                         status.progress_completed,
                         status.progress_total,
                         status.failure_message,
@@ -817,9 +821,11 @@ impl RemoteServerClient {
                 let status = proto_to_codebase_index_status_updated(&update)?;
                 log::info!(
                     "[Remote codebase indexing] Client received codebase index status push: \
-                     repo_path={} state={:?}",
+                     repo_path={} state={:?} root_hash_present={} embedding_config={:?}",
                     status.repo_path,
-                    status.state
+                    status.state,
+                    status.root_hash.is_some(),
+                    status.embedding_config,
                 );
                 Some(ClientEvent::CodebaseIndexStatusUpdated { status })
             }
