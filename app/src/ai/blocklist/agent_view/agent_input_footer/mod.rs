@@ -916,9 +916,9 @@ impl AgentInputFooter {
                 .ambient_agent_view_model
                 .as_ref()
                 .is_some_and(|ambient_agent_model| {
-                    ambient_agent_model
-                        .as_ref(app)
-                        .is_configuring_ambient_agent()
+                    let model = ambient_agent_model.as_ref(app);
+                    model.is_configuring_ambient_agent()
+                        || model.is_ready_for_cloud_followup_prompt()
                 })
     }
 
