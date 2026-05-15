@@ -859,7 +859,7 @@ enum DefaultSessionModeBehavior {
 
 #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
 struct CodeReviewPaneContext {
-    repo_path: Option<PathBuf>,
+    repo_path: Option<LocalOrRemotePath>,
     diff_state_model: ModelHandle<DiffStateModel>,
     terminal_view: WeakViewHandle<TerminalView>,
 }
@@ -5989,7 +5989,7 @@ impl Workspace {
                 path,
                 line_and_column,
             } => {
-                self.add_tab_for_code_file(path, line_and_column, ctx);
+                self.add_tab_for_code_location(path, line_and_column, ctx);
             }
             #[cfg(not(target_family = "wasm"))]
             RightPanelEvent::OpenLspLogs { log_path } => {
@@ -8090,7 +8090,7 @@ impl Workspace {
     ) {
         // If context is provided, use it directly. Otherwise, derive from active pane group.
         let context_data: Option<(
-            Option<PathBuf>,
+            Option<LocalOrRemotePath>,
             ModelHandle<DiffStateModel>,
             WeakViewHandle<TerminalView>,
         )> = if let Some(context) = context {
@@ -8104,22 +8104,19 @@ impl Workspace {
             // Read repo_path and terminal_view from the pane group (immutable context).
             let read_result = active_pane_group.read(ctx, |pane_group, ctx| {
                 pane_group.active_session_view(ctx).map(|terminal_view| {
-                    let repo_path = terminal_view
-                        .as_ref(ctx)
-                        .current_local_repo_path()
-                        .map(Path::to_path_buf);
+                    let repo_path = terminal_view.as_ref(ctx).current_repo_path().cloned();
                     (repo_path, terminal_view.downgrade())
                 })
             });
             // Resolve DiffStateModel outside the read closure (needs mutable context).
             read_result.and_then(
-                |(repo_path, terminal_view): (Option<PathBuf>, WeakViewHandle<TerminalView>)| {
-                    let diff_state_model = repo_path.as_ref().and_then(|rp: &PathBuf| {
+                |(repo_path, terminal_view): (
+                    Option<LocalOrRemotePath>,
+                    WeakViewHandle<TerminalView>,
+                )| {
+                    let diff_state_model = repo_path.as_ref().and_then(|rp| {
                         self.working_directories_model.update(ctx, |model, ctx| {
-                            model.get_or_create_diff_state_model(
-                                LocalOrRemotePath::Local(rp.clone()),
-                                ctx,
-                            )
+                            model.get_or_create_diff_state_model(rp.clone(), ctx)
                         })
                     })?;
                     Some((repo_path, diff_state_model, terminal_view))
@@ -8164,7 +8161,7 @@ impl Workspace {
         let repo_path = panel_context.repo_path.clone();
         let diff_state_model = repo_path.as_ref().and_then(|rp| {
             self.working_directories_model.update(ctx, |model, ctx| {
-                model.get_or_create_diff_state_model(LocalOrRemotePath::Local(rp.clone()), ctx)
+                model.get_or_create_diff_state_model(rp.clone(), ctx)
             })
         });
         let Some(diff_state_model) = diff_state_model else {
@@ -8272,22 +8269,19 @@ impl Workspace {
         // Read repo_path and terminal_view from pane group (immutable context).
         let read_result = pane_group_handle.read(ctx, |pane_group, ctx| {
             pane_group.active_session_view(ctx).map(|terminal_view| {
-                let repo_path = terminal_view
-                    .as_ref(ctx)
-                    .current_local_repo_path()
-                    .map(Path::to_path_buf);
+                let repo_path = terminal_view.as_ref(ctx).current_repo_path().cloned();
                 (repo_path, terminal_view.downgrade())
             })
         });
         // Resolve DiffStateModel outside the read closure (needs mutable context).
         let context = read_result.and_then(
-            |(repo_path, terminal_view): (Option<PathBuf>, WeakViewHandle<TerminalView>)| {
-                let diff_state_model = repo_path.as_ref().and_then(|rp: &PathBuf| {
+            |(repo_path, terminal_view): (
+                Option<LocalOrRemotePath>,
+                WeakViewHandle<TerminalView>,
+            )| {
+                let diff_state_model = repo_path.as_ref().and_then(|rp| {
                     self.working_directories_model.update(ctx, |model, ctx| {
-                        model.get_or_create_diff_state_model(
-                            LocalOrRemotePath::Local(rp.clone()),
-                            ctx,
-                        )
+                        model.get_or_create_diff_state_model(rp.clone(), ctx)
                     })
                 })?;
                 Some(CodeReviewPaneContext {
@@ -11192,10 +11186,22 @@ impl Workspace {
         line_and_column: Option<LineAndColumnArg>,
         ctx: &mut ViewContext<Self>,
     ) {
-        let source = CodeSource::Link {
-            path: file_path,
-            range_start: None,
-            range_end: None,
+        self.add_tab_for_code_location(LocalOrRemotePath::Local(file_path), line_and_column, ctx);
+    }
+
+    pub fn add_tab_for_code_location(
+        &mut self,
+        location: LocalOrRemotePath,
+        line_and_column: Option<LineAndColumnArg>,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        let source = match location {
+            LocalOrRemotePath::Local(path) => CodeSource::Link {
+                path,
+                range_start: None,
+                range_end: None,
+            },
+            remote @ LocalOrRemotePath::Remote(_) => CodeSource::FileTree { location: remote },
         };
         let pane = CodePane::new(source, line_and_column, ctx);
 
@@ -14764,7 +14770,7 @@ impl Workspace {
                     .update(ctx, |working_directories, ctx| {
                         working_directories.insert_code_review_comments(
                             pane_group.id(),
-                            repo_path.as_path(),
+                            repo_path,
                             comments,
                             diff_mode,
                             ctx,
@@ -14823,7 +14829,7 @@ impl Workspace {
                 if let Some(code_review_view) = self
                     .working_directories_model
                     .as_ref(ctx)
-                    .get_code_review_view(pane_group.id(), repo_path.as_path())
+                    .get_code_review_view(pane_group.id(), repo_path)
                 {
                     code_review_view.update(ctx, |code_review_view, ctx| {
                         code_review_view.set_diff_base(diff_mode.clone(), ctx);
@@ -21227,20 +21233,15 @@ impl TypedActionView for Workspace {
                         pane_group
                             .terminal_view_from_pane_id(locator.pane_id, ctx)
                             .map(|terminal_view| {
-                                let repo_path = terminal_view
-                                    .as_ref(ctx)
-                                    .current_local_repo_path()
-                                    .map(Path::to_path_buf);
+                                let repo_path =
+                                    terminal_view.as_ref(ctx).current_repo_path().cloned();
                                 (repo_path, terminal_view.downgrade())
                             })
                     });
                     if let Some((repo_path, terminal_view)) = read_result {
                         let diff_state_model = repo_path.as_ref().and_then(|rp| {
                             self.working_directories_model.update(ctx, |model, ctx| {
-                                model.get_or_create_diff_state_model(
-                                    LocalOrRemotePath::Local(rp.clone()),
-                                    ctx,
-                                )
+                                model.get_or_create_diff_state_model(rp.clone(), ctx)
                             })
                         });
                         if let Some(diff_state_model) = diff_state_model {

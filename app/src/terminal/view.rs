@@ -194,6 +194,7 @@ use ssh_file_upload::{FileUpload, FileUploadEvent};
 use uuid::Uuid;
 use warp_core::channel::ChannelState;
 use warp_util::local_or_remote_path::LocalOrRemotePath;
+use warp_util::standardized_path::StandardizedPath;
 use warpui::elements::{shimmering_text::ShimmeringTextStateHandle, Border, ChildView};
 use warpui::fonts::Properties;
 use warpui::{ViewHandle, WeakModelHandle};
@@ -1769,7 +1770,7 @@ pub enum Event {
     OpenCodeReviewPane(CodeReviewPanelArg),
     ToggleCodeReviewPane(CodeReviewPanelArg),
     InsertCodeReviewComments {
-        repo_path: PathBuf,
+        repo_path: LocalOrRemotePath,
         comments: Vec<PendingImportedReviewComment>,
         diff_mode: DiffMode,
         open_code_review: Option<CodeReviewPanelArg>,
@@ -6268,7 +6269,7 @@ impl TerminalView {
         ctx: &mut ViewContext<Self>,
     ) {
         let arg = CodeReviewPanelArg {
-            repo_path: self.current_local_repo_path().map(Path::to_path_buf),
+            repo_path: self.current_repo_path().cloned(),
             terminal_view: self.view_handle.clone(),
             entrypoint,
             focus_new_pane,
@@ -6358,13 +6359,21 @@ impl TerminalView {
             DiffMode::OtherBranch(branch_name) => DiffBase::BranchName(branch_name.clone()),
         };
 
+        let Ok(standardized_repo_path) = StandardizedPath::try_from_local(&repo_path) else {
+            log::warn!(
+                "Cannot attach diffset context: repo path is not a local absolute path: {:?}",
+                repo_path
+            );
+            return;
+        };
+
         // Create attachment reference and key using the shared function
         let main_branch_name = metadata.map(|m| m.main_branch_name.clone());
         let (attachment_reference, diff_set_key) = create_attachment_reference_and_key(
             &DiffSetScope::All,
             &diff_mode,
             main_branch_name.as_deref(),
-            &repo_path,
+            &standardized_repo_path,
         );
 
         // Insert the reference into the terminal input immediately
@@ -6618,8 +6627,9 @@ impl TerminalView {
         let open_code_review = if FeatureFlag::PRCommentsV2.is_enabled() {
             None
         } else {
+            let repo_path = LocalOrRemotePath::Local(repo_path.to_path_buf());
             Some(CodeReviewPanelArg {
-                repo_path: Some(repo_path.to_path_buf()),
+                repo_path: Some(repo_path.clone()),
                 terminal_view: self.view_handle.clone(),
                 entrypoint: CodeReviewPaneEntrypoint::InvokedByAgent,
                 focus_new_pane: false,
@@ -6628,7 +6638,7 @@ impl TerminalView {
         };
 
         ctx.emit(Event::InsertCodeReviewComments {
-            repo_path: repo_path.to_path_buf(),
+            repo_path: LocalOrRemotePath::Local(repo_path.to_path_buf()),
             comments: pending_comments,
             diff_mode,
             open_code_review,
@@ -19441,7 +19451,7 @@ impl TerminalView {
 
     fn imported_comments_panel_arg(&self) -> CodeReviewPanelArg {
         CodeReviewPanelArg {
-            repo_path: self.current_local_repo_path().map(Path::to_path_buf),
+            repo_path: self.current_repo_path().cloned(),
             terminal_view: self.view_handle.clone(),
             entrypoint: CodeReviewPaneEntrypoint::AgentModeRunning,
             focus_new_pane: true,
@@ -20574,7 +20584,7 @@ impl TerminalView {
             }
             InputEvent::OpenCodeReviewPane => {
                 ctx.emit(Event::OpenCodeReviewPane(CodeReviewPanelArg {
-                    repo_path: self.current_local_repo_path().map(Path::to_path_buf),
+                    repo_path: self.current_repo_path().cloned(),
                     terminal_view: self.view_handle.clone(),
                     entrypoint: CodeReviewPaneEntrypoint::GitDiffChip,
                     focus_new_pane: true,
@@ -25819,7 +25829,7 @@ impl TypedActionView for TerminalView {
             }
             ToggleCodeReviewPane { entrypoint } => {
                 ctx.emit(Event::ToggleCodeReviewPane(CodeReviewPanelArg {
-                    repo_path: self.current_local_repo_path().map(Path::to_path_buf),
+                    repo_path: self.current_repo_path().cloned(),
                     terminal_view: self.view_handle.clone(),
                     entrypoint: *entrypoint,
                     focus_new_pane: true,
